@@ -16,6 +16,7 @@ class DataExtractor():
             self.blue_channel = self.loadDataIntoArray(b).astype(np.uint8)
 
             self.full_image = np.dstack((self.red_channel, self.green_channel, self.blue_channel))
+            self.linear_image = colour_data
 
             self.filename = filename
             self.classification = classification
@@ -33,6 +34,9 @@ class DataExtractor():
         
         def getImage(self):
             return self.full_image
+        
+        def getLinearImage(self):
+            return self.linear_image
         
         def getChannel(self, channel):
             if channel == 'r': return self.red_channel
