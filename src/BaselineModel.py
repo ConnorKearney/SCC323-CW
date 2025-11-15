@@ -37,6 +37,14 @@ class MLP():
         self.outputActivationFunction = activations.Sigmoid
 
         self.sample_size = sample_size
+        self.class_map = np.array(self.n_classes)
+
+        self.print_info()
+
+    def print_info(self):
+        print(self.input_weights)
+        print(self.internal_weights)
+        print(self.output_weights)
 
     def fit(self, X, y):
         for i in range(X.shape[0]):
@@ -44,8 +52,20 @@ class MLP():
 
     def fit_single_batch(self, X, y):
         for _ in range(self.max_iter):
-            self.nextEpoch(X, y)
+            if not self.nextEpoch(X, y):
+                return
 
+    def generate_classification_map(self, y):
+        unique_classes = list(np.unique(y))
+        
+        if len(unique_classes) != self.n_classes:
+            return None
+        
+        self.class_map = unique_classes
+        return True
+
+    def find_in_class_map(self, value:int):
+        return self.class_map.index(value)
 
     def nextEpoch(self, X, y):
         
@@ -53,10 +73,24 @@ class MLP():
         inputs = X
         batch_size = len(X)
 
+        # used so that no matter what classes are used, the program can still calculate error
+        if not self.generate_classification_map(y):
+            print("class number mismatch")
+            return None
+
+        y_vector_form = np.zeros((batch_size, self.n_outputs))
+        for i in range(batch_size):
+            y_vector_form[i][self.find_in_class_map(y[i])] = 1
+
+        print("class map initialized")
+
         ## forward pass
 
+        self.u_values = np.zeros((self.n_layers, batch_size, self.n_nodes)) # unactivated
+        self.a_values = np.zeros((self.n_layers, batch_size, self.n_nodes)) # activated
+
+
         # input weights
-        print(self.u_values[0].shape)
         self.u_values[0] = np.dot(inputs, self.input_weights) + self.internal_bias_matrices[0]
         
         self.a_values[0] = self.internalActivationFunction(self.u_values[0])
@@ -71,7 +105,7 @@ class MLP():
         output = self.outputActivationFunction(output_u_values)
 
         # error calcualtion
-        error = output-y
+        error = output-y_vector_form
 
         # loss
         loss = lossFunctions.MSE_loss(output, y)
@@ -80,7 +114,7 @@ class MLP():
         # output layer delta
 
         d_output = error * self.outputActivationFunction.d(output)  # might need to change later
-        d_output_weights = np.dot(self.a_values[-1], d_output) / batch_size
+        d_output_weights = np.dot(self.a_values[-1].T, d_output) / batch_size
         d_output_bias = np.sum(d_output, axis=0, keepdims=True) / batch_size
 
         # update relevant weights
@@ -92,7 +126,7 @@ class MLP():
         d_previous_layer = d_output
         
 
-        for layer in range(self.n_layers, 1, -1):
+        for layer in range(self.n_layers-1, 0, -1):
             # deltas
             
             if layer == self.n_layers:
@@ -111,8 +145,31 @@ class MLP():
 
             d_previous_layer = d_unactivated_values 
 
-    def predict():
-        pass
+    def predict(self, X):
+        inputs = X
+        batch_size = len(X)
+
+        ## forward pass
+
+        self.u_values = np.zeros((self.n_layers, batch_size, self.n_nodes)) # unactivated
+        self.a_values = np.zeros((self.n_layers, batch_size, self.n_nodes)) # activated
+
+
+        # input weights
+        self.u_values[0] = np.dot(inputs, self.input_weights) + self.internal_bias_matrices[0]
+        
+        self.a_values[0] = self.internalActivationFunction(self.u_values[0])
+
+        # internal layers
+        for layer in range(1,self.n_layers):
+            self.u_values[layer] = np.dot(self.a_values[layer-1], self.internal_weights[layer-1]) + self.internal_bias_matrices[layer]
+            self.a_values[layer] = self.internalActivationFunction(self.u_values[layer])
+
+        # output layer
+        output_u_values = np.dot(self.a_values[-1], self.output_weights) + self.output_bias
+        output = self.outputActivationFunction(output_u_values)
+
+        
 
 
 
