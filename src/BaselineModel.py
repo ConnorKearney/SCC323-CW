@@ -21,19 +21,21 @@ class MLP():
         self.n_layers = n_layers
         self.n_nodes = n_nodes
 
-        self.input_weights = np.random.rand(self.n_features, self.n_nodes)
+        # He Normalisation as using ReLU
+        self.input_weights = np.random.normal(0, np.sqrt(2 / self.n_features), (self.n_features, self.n_nodes))
 
-        self.internal_weights = np.random.rand(self.n_layers, self.n_nodes, self.n_nodes)
+        self.internal_weights = np.random.normal(0, np.sqrt(2 / self.n_nodes), (self.n_layers, self.n_nodes, self.n_nodes))
 
-        self.output_weights = np.random.rand(self.n_nodes, self.n_outputs)
+        std_dev_out = np.sqrt(2/(self.n_nodes + self.n_outputs)) 
+        self.output_weights = np.random.normal(0, std_dev_out, (self.n_nodes, self.n_outputs))
 
         self.u_values = np.zeros((self.n_layers, self.n_nodes)) # unactivated
         self.a_values = np.zeros((self.n_layers, self.n_nodes)) # activated
 
-        self.internal_bias_matrices = np.zeros((self.n_layers, self.n_nodes))
+        self.internal_bias_matrices = np.zeros((self.n_layers, 1, self.n_nodes))
         self.output_bias = np.zeros((1, self.n_outputs))
 
-        self.internalActivationFunction = activations.tanh
+        self.internalActivationFunction = activations.ReLU
         self.outputActivationFunction = activations.Sigmoid
 
         self.sample_size = sample_size
@@ -52,8 +54,11 @@ class MLP():
 
     def fit_single_batch(self, X, y):
         for _ in range(self.max_iter):
-            if not self.nextEpoch(X, y):
+            loss = self.nextEpoch(X, y)
+            if not loss.any():
                 return
+            
+            print(loss)
 
     def generate_classification_map(self, y):
         unique_classes = list(np.unique(y))
@@ -82,7 +87,7 @@ class MLP():
         for i in range(batch_size):
             y_vector_form[i][self.find_in_class_map(y[i])] = 1
 
-        print("class map initialized")
+        #print("class map initialized")
 
         ## forward pass
 
@@ -108,7 +113,7 @@ class MLP():
         error = output-y_vector_form
 
         # loss
-        loss = lossFunctions.MSE_loss(output, y)
+        loss = lossFunctions.MSE_loss(output, y_vector_form)
 
         ## back propogation
         # output layer delta
@@ -126,26 +131,40 @@ class MLP():
         d_previous_layer = d_output
         
 
-        for layer in range(self.n_layers-1, 0, -1):
+        for layer in range(self.n_layers-1, -1, -1):
+            #print(layer)
             # deltas
             
-            if layer == self.n_layers:
+            if layer == self.n_layers-1:
                 d_activated_values = np.dot(d_previous_layer, self.output_weights.T)
             else:
-                d_activated_values = np.dot(d_previous_layer, self.internal_weights[layer-1].T)
+                d_activated_values = np.dot(d_previous_layer, self.internal_weights[layer].T)
 
             d_unactivated_values = d_activated_values * self.internalActivationFunction.d(self.u_values[layer])
-            d_layer_weights = np.dot(inputs.T, d_unactivated_values) / batch_size
-            d_layer_bias = np.sum(d_unactivated_values, axis=0, keepdims=True) / batch_size
+
+            if layer==0:
+                previous_activation = inputs
+
+            else:
+                previous_activation = self.a_values[layer-1]
+
+            d_layer_weights = np.dot(previous_activation.T, d_unactivated_values) / batch_size
+            d_layer_bias = (np.sum(d_unactivated_values, axis=0, keepdims=True) / batch_size)
 
             # updates
             
-            self.internal_weights[layer] -= self.lr * d_layer_weights
-            self.internal_bias_matrices[layer] -= self.lr * d_layer_bias
+            if layer == 0:
+                self.input_weights -= self.lr * d_layer_weights
+                self.internal_bias_matrices[0] -= self.lr * d_layer_bias
+            else:
+                self.internal_weights[layer-1] -= self.lr * d_layer_weights
+                self.internal_bias_matrices[layer] -= self.lr * d_layer_bias
 
             d_previous_layer = d_unactivated_values 
 
-    def predict(self, X):
+        return loss
+
+    def __predict__(self, X):
         inputs = X
         batch_size = len(X)
 
@@ -169,8 +188,79 @@ class MLP():
         output_u_values = np.dot(self.a_values[-1], self.output_weights) + self.output_bias
         output = self.outputActivationFunction(output_u_values)
 
-        
 
+    def predict(self, X):
+        """
+        Performs a forward pass on the input data X to generate predictions.
+        
+        Args:
+            X (np.ndarray): The input data matrix, shape (N_samples, n_features).
+
+        Returns:
+            tuple: (probabilities, predicted_classes).
+        """
+        inputs = X
+        
+        # --- Forward Pass ---
+
+        # 1. Input Layer to First Hidden Layer (Layer 0)
+        # Assumes internal_bias_matrices[0] is (1, n_nodes) for correct broadcasting.
+        u_l0 = np.dot(inputs, self.input_weights) + self.internal_bias_matrices[0]
+        a_l0 = self.internalActivationFunction(u_l0)
+
+        current_activation = a_l0
+
+        # 2. Internal Layers
+        for layer in range(1, self.n_layers):
+            # Assumes internal_bias_matrices[layer] is (1, n_nodes).
+            u_l = np.dot(current_activation, self.internal_weights[layer-1]) + self.internal_bias_matrices[layer]
+            current_activation = self.internalActivationFunction(u_l)
+
+        # 3. Output Layer
+        # Assumes output_bias is (1, n_outputs).
+        output_u_values = np.dot(current_activation, self.output_weights) + self.output_bias
+        
+        probabilities = self.outputActivationFunction(output_u_values)
+        
+        # --- Classification ---
+        # Get the index of the highest probability (the predicted class)
+        predicted_classes = np.argmax(probabilities, axis=1)
+
+        return probabilities, predicted_classes
+
+        
+    def calculate_accuracy(self, X, y):
+        """
+        Calculates the classification accuracy of the model on the given dataset.
+        
+        Args:
+            X (np.ndarray): The input data matrix, shape (N_samples, n_features).
+            y (np.ndarray): The true target labels (integer class indices).
+            
+        Returns:
+            float: The accuracy (proportion of correct predictions).
+        """
+        import numpy as np
+        
+        # 1. Get predictions from the forward pass
+        # The predict function returns (probabilities, predicted_classes). We only need the latter.
+        _, predicted_classes = self.predict(X)
+        
+        # 2. Ensure the true labels are a flat vector for comparison
+        # This handles cases where y might be (N_samples, 1) or (N_samples,).
+        y_flat = y.flatten()
+
+        # 3. Compare predictions to true labels
+        # np.sum(predicted_classes == y_flat) counts the number of correct matches.
+        correct_predictions = np.sum(predicted_classes == y_flat)
+        
+        # 4. Calculate accuracy
+        total_samples = y.shape[0]
+        
+        # Accuracy is (Correct / Total)
+        accuracy = correct_predictions / total_samples
+        
+        return accuracy
 
 
 
@@ -183,11 +273,16 @@ if (__name__ == "__main__"):
     X_train = [img.getLinearImage() for img in train_data]
     y_train = [img.getClassification() for img in train_data]
 
-    MLP1 = MLP(n_features=3072, n_layers=2, n_nodes=10, n_classes=5)
+    MLP1 = MLP(n_features=3072, n_layers=2, n_nodes=10, n_classes=5, lr=0.01)
 
     MLP1.fit(np.array([X_train]), np.array([y_train]))
     
-    
+    test_data = D1.readData()
+    X_test = np.array([img.getLinearImage() for img in test_data])
+    y_test = np.array([img.getClassification() for img in test_data])
+
+
+    print(MLP1.calculate_accuracy(X_test, y_test))
 
     
 

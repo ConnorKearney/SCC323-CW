@@ -2,12 +2,10 @@ import numpy as np
 
 class ReLU_func:
     def _call_scalar(self,x):
-            if x > 0: return x
-            return 0
+            return np.maximum(0,x)
         
     def _d_scalar(self,x):
-            if x > 0: return 1
-            return 0    
+            return (x>0).astype(float)  
         
     def __call__(self,x):
         return np.vectorize(self._call_scalar)(x)
@@ -16,12 +14,22 @@ class ReLU_func:
         return np.vectorize(self._d_scalar)(x)
 
 class Sigmoid_func:
-    def __call__(self, x):
-        return (np.exp(x))/(np.exp(x) + 1)
+    def _call_scalar(self, x):
+        return np.where(x >= 0, 
+                        1.0 / (1.0 + np.exp(-x)), 
+                        np.exp(x) / (np.exp(x) + 1.0))
     
-    def d(self, x):
+    def _d_scalar(self, x):
         value = self(x)
         return value * (1-value)
+    
+    
+    def __call__(self, x):
+        return np.vectorize(self._call_scalar)(x)
+    
+    def d(self, x):
+        return np.vectorize(self._d_scalar)(x)
+        
     
 class tanh_func:
     def __call__(self, x):
