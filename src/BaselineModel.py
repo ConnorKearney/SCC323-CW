@@ -7,7 +7,7 @@ import numpy as np
 
 class MLP():
     
-    def __init__(self, n_features=2, n_layers=1, n_nodes=3, n_classes=2, lr=0.1, max_iter=1000, sample_size=None):
+    def __init__(self, n_features=2, n_layers=1, n_nodes=3, n_classes=2, lr=0.1, max_iter=10000, sample_size=None):
         random.seed(0)
         self.n_features = n_features
         if n_classes > 2:
@@ -36,29 +36,37 @@ class MLP():
         self.output_bias = np.zeros((1, self.n_outputs))
 
         self.internalActivationFunction = activations.ReLU
-        self.outputActivationFunction = activations.Sigmoid
+        self.outputActivationFunction = activations.Softmax
 
         self.sample_size = sample_size
         self.class_map = np.array(self.n_classes)
 
-        self.print_info()
+        #self.print_info()
 
     def print_info(self):
-        print(self.input_weights)
-        print(self.internal_weights)
-        print(self.output_weights)
+        print("input weights:\n", self.input_weights)
+        print("internal weights:\n", self.internal_weights)
+        print("output weights:\n", self.output_weights)
+
+        print((self.internal_weights < 1.0e-10).sum())
+        print(np.sqrt(2 / self.n_features))
+        print()
 
     def fit(self, X, y):
         for i in range(X.shape[0]):
             self.fit_single_batch(X[i], y[i])
 
     def fit_single_batch(self, X, y):
-        for _ in range(self.max_iter):
+        for i in range(self.max_iter):
+            
             loss = self.nextEpoch(X, y)
+            print(i, " loss: ", loss)
+            if i%1000 == 0:
+                print(i, " loss: ", loss)
             if not loss.any():
                 return
             
-            print(loss)
+            #print(loss)
 
     def generate_classification_map(self, y):
         unique_classes = list(np.unique(y))
@@ -109,16 +117,22 @@ class MLP():
         output_u_values = np.dot(self.a_values[-1], self.output_weights) + self.output_bias
         output = self.outputActivationFunction(output_u_values)
 
+        #print(output)
+        #if (not np.all(output)):
+            #print(output)
+
         # error calcualtion
-        error = output-y_vector_form
+        #error = output-y_vector_form
 
         # loss
-        loss = lossFunctions.MSE_loss(output, y_vector_form)
+        avg_loss = lossFunctions.batch_Entropy_loss(output, y_vector_form)
+        #print("loss:",avg_loss)
 
         ## back propogation
         # output layer delta
 
-        d_output = error * self.outputActivationFunction.d(output)  # might need to change later
+        #d_output = avg_loss * self.outputActivationFunction.d(output)  # might need to change later
+        d_output = output - y_vector_form
         d_output_weights = np.dot(self.a_values[-1].T, d_output) / batch_size
         d_output_bias = np.sum(d_output, axis=0, keepdims=True) / batch_size
 
@@ -162,7 +176,7 @@ class MLP():
 
             d_previous_layer = d_unactivated_values 
 
-        return loss
+        return avg_loss
 
     def __predict__(self, X):
         inputs = X
@@ -189,7 +203,7 @@ class MLP():
         output = self.outputActivationFunction(output_u_values)
 
 
-    def predict(self, X):
+    def predict(self, X): # redo
         """
         Performs a forward pass on the input data X to generate predictions.
         
@@ -229,7 +243,7 @@ class MLP():
         return probabilities, predicted_classes
 
         
-    def calculate_accuracy(self, X, y):
+    def calculate_accuracy(self, X, y): # redo
         """
         Calculates the classification accuracy of the model on the given dataset.
         
@@ -270,8 +284,11 @@ if (__name__ == "__main__"):
     
     #read data_batch 1
     train_data = D1.readData(1)
-    X_train = [img.getLinearImage() for img in train_data]
-    y_train = [img.getClassification() for img in train_data]
+    X_train = np.array([img.getLinearImage() for img in train_data])
+    y_train = np.array([img.getClassification() for img in train_data])
+    
+    X_train = np.divide(X_train, 255)
+    #y_train = y_train[0:1000]
 
     MLP1 = MLP(n_features=3072, n_layers=2, n_nodes=10, n_classes=5, lr=0.01)
 
