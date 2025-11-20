@@ -36,7 +36,7 @@ class DataExtractor():
             return self.full_image
         
         def getLinearImage(self):
-            return self.linear_image
+            return np.divide(self.linear_image,255)
         
         def getChannel(self, channel):
             if channel == 'r': return self.red_channel

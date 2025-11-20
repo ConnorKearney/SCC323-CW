@@ -7,7 +7,7 @@ import numpy as np
 
 class MLP():
     
-    def __init__(self, n_features=2, n_layers=1, n_nodes=3, n_classes=2, lr=0.1, max_iter=10000, sample_size=None):
+    def __init__(self, n_features=2, n_layers=1, n_nodes=3, n_classes=2, lr=0.1, max_iter=10000, sample_size=None, lr_coef = 0.9):
         random.seed(0)
         self.n_features = n_features
         if n_classes > 2:
@@ -17,6 +17,7 @@ class MLP():
 
         self.n_classes = n_classes
         self.lr = lr
+        self.lr_coeff = lr_coef
         self.max_iter = max_iter
         self.n_layers = n_layers
         self.n_nodes = n_nodes
@@ -61,8 +62,8 @@ class MLP():
             
             loss = self.nextEpoch(X, y)
             print(i, " loss: ", loss)
-            if i%1000 == 0:
-                print(i, " loss: ", loss)
+            if i % 500 == 0 and i != 0:
+                self.lr *= self.lr_coeff
             if not loss.any():
                 return
             
@@ -286,8 +287,7 @@ if (__name__ == "__main__"):
     train_data = D1.readData(1)
     X_train = np.array([img.getLinearImage() for img in train_data])
     y_train = np.array([img.getClassification() for img in train_data])
-    
-    X_train = np.divide(X_train, 255)
+
     #y_train = y_train[0:1000]
 
     MLP1 = MLP(n_features=3072, n_layers=2, n_nodes=10, n_classes=5, lr=0.01)
