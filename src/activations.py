@@ -1,5 +1,5 @@
 import numpy as np
-import math 
+import warnings
 
 np.seterr(under="warn")
 
@@ -57,9 +57,18 @@ class tanh_func:
 class softmax_func:
     def _call_single(self,x:np.array):
         shift = np.max(x)
-        shifted_x = x - shift
+        shifted_x = x - shift + 1.0e-7
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = np.exp(shifted_x)/np.sum(np.exp(shifted_x))
+
+            if len(w)>0:
+                #print("Error: ", w)
+                #print(shifted_x)
+                #print("\n\n\n\n\n\n")
+                pass
         
-        return (np.exp(shifted_x)/np.sum(np.exp(shifted_x)))
+        return result
     
     def _d_single(self,x):
         return self(x)*(np.identity(len(x))-self(x))

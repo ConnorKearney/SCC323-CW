@@ -7,8 +7,10 @@ import numpy as np
 
 class MLP():
     
-    def __init__(self, n_features=2, n_layers=1, n_nodes=3, n_classes=2, lr=0.1, max_iter=10000, sample_size=None, lr_coef = 0.9):
+    def __init__(self, n_features=2, n_layers=1, n_nodes=3, n_classes=2, lr=0.1, max_iter=10000, sample_size=None, lr_coef = 0.8):
         random.seed(0)
+        generator = np.random.default_rng(0)
+
         self.n_features = n_features
         if n_classes > 2:
             self.n_outputs = n_classes
@@ -23,12 +25,12 @@ class MLP():
         self.n_nodes = n_nodes
 
         # He Normalisation as using ReLU
-        self.input_weights = np.random.normal(0, np.sqrt(2 / self.n_features), (self.n_features, self.n_nodes))
+        self.input_weights = generator.normal(0, np.sqrt(2 / self.n_features), (self.n_features, self.n_nodes))
 
-        self.internal_weights = np.random.normal(0, np.sqrt(2 / self.n_nodes), (self.n_layers, self.n_nodes, self.n_nodes))
+        self.internal_weights = generator.normal(0, np.sqrt(2 / self.n_nodes), (self.n_layers, self.n_nodes, self.n_nodes))
 
         std_dev_out = np.sqrt(2/(self.n_nodes + self.n_outputs)) 
-        self.output_weights = np.random.normal(0, std_dev_out, (self.n_nodes, self.n_outputs))
+        self.output_weights = generator.normal(0, std_dev_out, (self.n_nodes, self.n_outputs))
 
         self.u_values = np.zeros((self.n_layers, self.n_nodes)) # unactivated
         self.a_values = np.zeros((self.n_layers, self.n_nodes)) # activated
@@ -58,13 +60,29 @@ class MLP():
             self.fit_single_batch(X[i], y[i])
 
     def fit_single_batch(self, X, y):
+        # get the batch sample to use
+        batch_size = len(X)
+        
+
+        # used so that no matter what classes are used, the program can still calculate error
+        if not self.generate_classification_map(y):
+            print("class number mismatch")
+            return None
+
+        y_vector_form = np.zeros((batch_size, self.n_outputs))
+        for i in range(batch_size):
+            y_vector_form[i][self.find_in_class_map(y[i])] = 1
+
+        
+        
         for i in range(self.max_iter):
             
-            loss = self.nextEpoch(X, y)
-            print(i, " loss: ", loss)
+            loss = self.nextEpoch(X, y_vector_form)
             if i % 500 == 0 and i != 0:
                 self.lr *= self.lr_coeff
-            if not loss.any():
+            if i % 100 == 0:
+                print(i, " loss: ", loss)
+            if loss == None:
                 return
             
             #print(loss)
@@ -82,20 +100,9 @@ class MLP():
         return self.class_map.index(value)
 
     def nextEpoch(self, X, y):
-        
-        # get the batch sample to use
         inputs = X
         batch_size = len(X)
-
-        # used so that no matter what classes are used, the program can still calculate error
-        if not self.generate_classification_map(y):
-            print("class number mismatch")
-            return None
-
-        y_vector_form = np.zeros((batch_size, self.n_outputs))
-        for i in range(batch_size):
-            y_vector_form[i][self.find_in_class_map(y[i])] = 1
-
+        
         #print("class map initialized")
 
         ## forward pass
@@ -126,16 +133,21 @@ class MLP():
         #error = output-y_vector_form
 
         # loss
-        avg_loss = lossFunctions.batch_Entropy_loss(output, y_vector_form)
+        avg_loss = lossFunctions.batch_Entropy_loss(output, y)
         #print("loss:",avg_loss)
 
         ## back propogation
         # output layer delta
 
         #d_output = avg_loss * self.outputActivationFunction.d(output)  # might need to change later
-        d_output = output - y_vector_form
+        d_output = output - y
         d_output_weights = np.dot(self.a_values[-1].T, d_output) / batch_size
         d_output_bias = np.sum(d_output, axis=0, keepdims=True) / batch_size
+
+        # Gradient Clipping
+        d_output_weights = np.clip(d_output_weights, -1.0, 1.0)
+        d_output_bias = np.clip(d_output_bias, -1.0, 1.0)
+
 
         # update relevant weights
         self.output_weights -= self.lr * d_output_weights
@@ -165,6 +177,11 @@ class MLP():
 
             d_layer_weights = np.dot(previous_activation.T, d_unactivated_values) / batch_size
             d_layer_bias = (np.sum(d_unactivated_values, axis=0, keepdims=True) / batch_size)
+
+            # clipping gradients
+            d_layer_weights = np.clip(d_layer_weights, -1.0, 1.0)
+            d_layer_bias = np.clip(d_layer_bias, -1.0, 1.0)
+
 
             # updates
             
@@ -255,11 +272,12 @@ class MLP():
         Returns:
             float: The accuracy (proportion of correct predictions).
         """
-        import numpy as np
         
         # 1. Get predictions from the forward pass
         # The predict function returns (probabilities, predicted_classes). We only need the latter.
         _, predicted_classes = self.predict(X)
+        for i in range(len(predicted_classes)):
+            predicted_classes[i] = self.class_map[predicted_classes[i]]
         
         # 2. Ensure the true labels are a flat vector for comparison
         # This handles cases where y might be (N_samples, 1) or (N_samples,).
@@ -280,7 +298,7 @@ class MLP():
 
 
 
-if (__name__ == "__main__"):
+if (__name__ == "__main__"):    
     D1 = DataExtractor.DataExtractor()
     
     #read data_batch 1
@@ -288,10 +306,14 @@ if (__name__ == "__main__"):
     X_train = np.array([img.getLinearImage() for img in train_data])
     y_train = np.array([img.getClassification() for img in train_data])
 
+    size = 100
+
+    X_train, y_train = X_train[:size], y_train[:size]
+
     #y_train = y_train[0:1000]
 
-    MLP1 = MLP(n_features=3072, n_layers=2, n_nodes=10, n_classes=5, lr=0.01)
-
+    MLP1 = MLP(n_features=3072, n_layers=3, n_nodes=64, n_classes=5, lr=0.01, max_iter=2000)
+    print("training")
     MLP1.fit(np.array([X_train]), np.array([y_train]))
     
     test_data = D1.readData()
