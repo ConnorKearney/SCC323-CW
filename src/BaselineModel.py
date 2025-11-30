@@ -1,3 +1,15 @@
+import os
+
+N_THREADS = '4'
+
+os.environ['OMP_NUM_THREADS'] = N_THREADS
+os.environ['OPENBLAS_NUM_THREADS'] = N_THREADS
+os.environ['MKL_NUM_THREADS'] = N_THREADS
+os.environ['VECLIB_MAXIMUM_THREADS'] = N_THREADS
+os.environ['NUMEXPR_NUM_THREADS'] = N_THREADS
+
+
+
 import activations
 import lossFunctions
 import DataExtractor
@@ -119,17 +131,17 @@ class MLP():
 
 
         # input weights
-        self.u_values[0] = np.dot(inputs, self.input_weights) + self.internal_bias_matrices[0]
+        self.u_values[0] = inputs @ self.input_weights + self.internal_bias_matrices[0]
         
         self.a_values[0] = self.internalActivationFunction(self.u_values[0])
 
         # internal layers
         for layer in range(1,self.n_layers):
-            self.u_values[layer] = np.dot(self.a_values[layer-1], self.internal_weights[layer-1]) + self.internal_bias_matrices[layer]
+            self.u_values[layer] = self.a_values[layer-1] @ self.internal_weights[layer-1] + self.internal_bias_matrices[layer]
             self.a_values[layer] = self.internalActivationFunction(self.u_values[layer])
 
         # output layer
-        output_u_values = np.dot(self.a_values[-1], self.output_weights) + self.output_bias
+        output_u_values = self.a_values[-1] @ self.output_weights + self.output_bias
         output = self.outputActivationFunction(output_u_values)
 
         #print(output)
@@ -306,6 +318,9 @@ class MLP():
 
 
 if (__name__ == "__main__"):    
+    np.show_config()
+    
+    
     D1 = DataExtractor.DataExtractor()
     
     train_data = []
