@@ -44,6 +44,9 @@ class MLP():
         self.sample_size = sample_size
         self.class_map = np.array(self.n_classes)
 
+        
+
+
         #self.print_info()
 
     def print_info(self):
@@ -56,8 +59,12 @@ class MLP():
         print()
 
     def fit(self, X, y):
-        for i in range(X.shape[0]):
-            self.fit_single_batch(X[i], y[i])
+        for i in range(len(X)):
+            print("fitting batch: ", i+1)
+            batch_size = len(X[i])
+            self.u_values = np.zeros((self.n_layers, batch_size, self.n_nodes)) # unactivated
+            self.a_values = np.zeros((self.n_layers, batch_size, self.n_nodes)) # activated
+            self.fit_single_batch(np.array(X[i]), np.array(y[i]))
 
     def fit_single_batch(self, X, y):
         # get the batch sample to use
@@ -107,8 +114,8 @@ class MLP():
 
         ## forward pass
 
-        self.u_values = np.zeros((self.n_layers, batch_size, self.n_nodes)) # unactivated
-        self.a_values = np.zeros((self.n_layers, batch_size, self.n_nodes)) # activated
+        self.u_values[:] = 0 # unactivated
+        self.a_values[:] = 0 # activated
 
 
         # input weights
@@ -301,20 +308,30 @@ class MLP():
 if (__name__ == "__main__"):    
     D1 = DataExtractor.DataExtractor()
     
-    #read data_batch 1
-    train_data = D1.readData(1)
-    X_train = np.array([img.getLinearImage() for img in train_data])
-    y_train = np.array([img.getClassification() for img in train_data])
+    train_data = []
+    X_train = []
+    y_train = []
 
-    size = 100
+    for i in range(1,6):
+        current_batch = D1.readData(i)
 
-    X_train, y_train = X_train[:size], y_train[:size]
+        if current_batch:
+            X_batch = [img.getLinearImage() for img in current_batch]
+            y_batch = [img.getClassification() for img in current_batch]
+        
+            # Append the new batch array to the lists. This preserves the batch structure.
+            X_train.append(X_batch)
+            y_train.append(y_batch)
+
+
+
+    #X_train, y_train = X_train[:size], y_train[:size]
 
     #y_train = y_train[0:1000]
 
-    MLP1 = MLP(n_features=3072, n_layers=3, n_nodes=64, n_classes=5, lr=0.01, max_iter=2000)
+    MLP1 = MLP(n_features=3072, n_layers=3, n_nodes=10, n_classes=5, lr=0.01, max_iter=2000)
     print("training")
-    MLP1.fit(np.array([X_train]), np.array([y_train]))
+    MLP1.fit(X_train, y_train)
     
     test_data = D1.readData()
     X_test = np.array([img.getLinearImage() for img in test_data])
