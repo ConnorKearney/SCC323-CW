@@ -1,14 +1,3 @@
-import os
-
-N_THREADS = '4'
-
-os.environ['OMP_NUM_THREADS'] = N_THREADS
-os.environ['OPENBLAS_NUM_THREADS'] = N_THREADS
-os.environ['MKL_NUM_THREADS'] = N_THREADS
-os.environ['VECLIB_MAXIMUM_THREADS'] = N_THREADS
-os.environ['NUMEXPR_NUM_THREADS'] = N_THREADS
-
-
 
 import activations
 import lossFunctions
@@ -144,13 +133,6 @@ class MLP():
         output_u_values = self.a_values[-1] @ self.output_weights + self.output_bias
         output = self.outputActivationFunction(output_u_values)
 
-        #print(output)
-        #if (not np.all(output)):
-            #print(output)
-
-        # error calcualtion
-        #error = output-y_vector_form
-
         # loss
         avg_loss = lossFunctions.batch_Entropy_loss(output, y)
         #print("loss:",avg_loss)
@@ -215,101 +197,73 @@ class MLP():
 
         return avg_loss
 
-    def __predict__(self, X):
+    def predict(self, X):
         inputs = X
-        batch_size = len(X)
+        
 
         ## forward pass
 
-        self.u_values = np.zeros((self.n_layers, batch_size, self.n_nodes)) # unactivated
-        self.a_values = np.zeros((self.n_layers, batch_size, self.n_nodes)) # activated
+        self.u_values[:] = 0 # unactivated
+        self.a_values[:] = 0 # activated
 
 
         # input weights
-        self.u_values[0] = np.dot(inputs, self.input_weights) + self.internal_bias_matrices[0]
+        u_0 = np.dot(inputs, self.input_weights) + self.internal_bias_matrices[0]
         
-        self.a_values[0] = self.internalActivationFunction(self.u_values[0])
+        a_0 = self.internalActivationFunction(u_0)
+        current_activation = a_0
 
         # internal layers
         for layer in range(1,self.n_layers):
-            self.u_values[layer] = np.dot(self.a_values[layer-1], self.internal_weights[layer-1]) + self.internal_bias_matrices[layer]
-            self.a_values[layer] = self.internalActivationFunction(self.u_values[layer])
+            u_l = np.dot(current_activation, self.internal_weights[layer-1]) + self.internal_bias_matrices[layer]
+            current_activation = self.internalActivationFunction(u_l)
 
         # output layer
-        output_u_values = np.dot(self.a_values[-1], self.output_weights) + self.output_bias
-        output = self.outputActivationFunction(output_u_values)
+        output_u_values = np.dot(current_activation, self.output_weights) + self.output_bias
+        probabilities = self.outputActivationFunction(output_u_values)
+
+        output = np.argmax(probabilities, axis=1)
+
+        return output
 
 
-    def predict(self, X): # redo
-        """
-        Performs a forward pass on the input data X to generate predictions.
-        
-        Args:
-            X (np.ndarray): The input data matrix, shape (N_samples, n_features).
-
-        Returns:
-            tuple: (probabilities, predicted_classes).
-        """
+    def __predict__(self, X): # redo
+       
         inputs = X
         
-        # --- Forward Pass ---
-
-        # 1. Input Layer to First Hidden Layer (Layer 0)
-        # Assumes internal_bias_matrices[0] is (1, n_nodes) for correct broadcasting.
         u_l0 = np.dot(inputs, self.input_weights) + self.internal_bias_matrices[0]
         a_l0 = self.internalActivationFunction(u_l0)
 
         current_activation = a_l0
 
-        # 2. Internal Layers
+
         for layer in range(1, self.n_layers):
-            # Assumes internal_bias_matrices[layer] is (1, n_nodes).
             u_l = np.dot(current_activation, self.internal_weights[layer-1]) + self.internal_bias_matrices[layer]
             current_activation = self.internalActivationFunction(u_l)
 
-        # 3. Output Layer
-        # Assumes output_bias is (1, n_outputs).
+
         output_u_values = np.dot(current_activation, self.output_weights) + self.output_bias
         
         probabilities = self.outputActivationFunction(output_u_values)
-        
-        # --- Classification ---
-        # Get the index of the highest probability (the predicted class)
+
         predicted_classes = np.argmax(probabilities, axis=1)
 
         return probabilities, predicted_classes
 
         
-    def calculate_accuracy(self, X, y): # redo
-        """
-        Calculates the classification accuracy of the model on the given dataset.
-        
-        Args:
-            X (np.ndarray): The input data matrix, shape (N_samples, n_features).
-            y (np.ndarray): The true target labels (integer class indices).
-            
-        Returns:
-            float: The accuracy (proportion of correct predictions).
-        """
-        
-        # 1. Get predictions from the forward pass
-        # The predict function returns (probabilities, predicted_classes). We only need the latter.
-        _, predicted_classes = self.predict(X)
+    def calculate_accuracy(self, X, y): # redo 
+
+        predicted_classes = self.predict(X)
         for i in range(len(predicted_classes)):
             predicted_classes[i] = self.class_map[predicted_classes[i]]
         
-        # 2. Ensure the true labels are a flat vector for comparison
-        # This handles cases where y might be (N_samples, 1) or (N_samples,).
         y_flat = y.flatten()
 
-        # 3. Compare predictions to true labels
-        # np.sum(predicted_classes == y_flat) counts the number of correct matches.
         correct_predictions = np.sum(predicted_classes == y_flat)
         
-        # 4. Calculate accuracy
+
         total_samples = y.shape[0]
         
-        # Accuracy is (Correct / Total)
         accuracy = correct_predictions / total_samples
         
         return accuracy
@@ -318,14 +272,16 @@ class MLP():
 
 
 if (__name__ == "__main__"):    
-    np.show_config()
     
+    print(np.__file__)
     
     D1 = DataExtractor.DataExtractor()
     
     train_data = []
     X_train = []
     y_train = []
+    
+   
 
     for i in range(1,6):
         current_batch = D1.readData(i)

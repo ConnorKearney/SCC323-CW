@@ -58,15 +58,7 @@ class softmax_func:
     def _call_single(self,x:np.array):
         shift = np.max(x)
         shifted_x = x - shift + 1.0e-7
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            result = np.exp(shifted_x)/np.sum(np.exp(shifted_x))
-
-            if len(w)>0:
-                #print("Error: ", w)
-                #print(shifted_x)
-                #print("\n\n\n\n\n\n")
-                pass
+        result = np.exp(shifted_x)/np.sum(np.exp(shifted_x))
         
         return result
     
