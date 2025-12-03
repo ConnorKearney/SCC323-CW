@@ -57,7 +57,7 @@ class tanh_func:
 class softmax_func:
     def _call_single(self,x:np.array):
         shift = np.max(x)
-        shifted_x = x - shift + 1.0e-7
+        shifted_x = x - shift
         result = np.exp(shifted_x)/np.sum(np.exp(shifted_x))
         
         return result

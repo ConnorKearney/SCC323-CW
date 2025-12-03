@@ -8,7 +8,7 @@ import numpy as np
 
 class MLP():
     
-    def __init__(self, n_features=2, n_layers=1, n_nodes=3, n_classes=2, lr=0.1, max_iter=10000, sample_size=None, lr_coef = 0.8):
+    def __init__(self, n_features=2, n_layers=1, n_nodes=3, n_classes=2, lr=0.1, max_iter=10000, sample_size=None, lr_coef = 0.8, batch_size = 256):
         random.seed(0)
         generator = np.random.default_rng(0)
 
@@ -18,9 +18,11 @@ class MLP():
         else:
             self.n_outputs = 1
 
+        self.batch_size = batch_size
+
         self.n_classes = n_classes
         self.lr = lr
-        self.lr_coeff = lr_coef
+        self.lr_coef = lr_coef
         self.max_iter = max_iter
         self.n_layers = n_layers
         self.n_nodes = n_nodes
@@ -59,13 +61,36 @@ class MLP():
         print(np.sqrt(2 / self.n_features))
         print()
 
+
     def fit(self, X, y):
-        for i in range(len(X)):
-            print("fitting batch: ", i+1)
-            batch_size = len(X[i])
-            self.u_values = np.zeros((self.n_layers, batch_size, self.n_nodes)) # unactivated
-            self.a_values = np.zeros((self.n_layers, batch_size, self.n_nodes)) # activated
-            self.fit_single_batch(np.array(X[i]), np.array(y[i]))
+        number_of_batches = int(np.floor(len(X)/self.batch_size))
+        X_batches = []
+        y_batches = []
+
+        for i in range(number_of_batches):
+            X_batches.append(X[i*self.batch_size:(i+1)*self.batch_size])
+            y_batches.append(y[i*self.batch_size:(i+1)*self.batch_size])
+
+
+        X_batches, y_batches = np.array(X_batches), np.array(y_batches)
+
+        self.fitBatches(X_batches, y_batches)
+
+    def fitBatches(self, X, y):
+        for j in range(self.max_iter):
+            for i in range(len(X)):
+                #print("fitting batch: ", i+1)
+                batch_size = len(X[i])
+                self.u_values = np.zeros((self.n_layers, batch_size, self.n_nodes)) # unactivated
+                self.a_values = np.zeros((self.n_layers, batch_size, self.n_nodes)) # activated
+                loss = self.fit_single_batch(np.array(X[i]), np.array(y[i]))
+                
+            if j % 500 == 0 and j != 0:
+                self.lr *= self.lr_coef
+            if j % 100 == 0:
+                print(j, " loss: ", loss)
+            if loss == None:
+                return
 
     def fit_single_batch(self, X, y):
         # get the batch sample to use
@@ -81,19 +106,12 @@ class MLP():
         for i in range(batch_size):
             y_vector_form[i][self.find_in_class_map(y[i])] = 1
 
-        
-        
-        for i in range(self.max_iter):
+    
             
-            loss = self.nextEpoch(X, y_vector_form)
-            if i % 500 == 0 and i != 0:
-                self.lr *= self.lr_coeff
-            if i % 100 == 0:
-                print(i, " loss: ", loss)
-            if loss == None:
-                return
+        loss = self.nextIteration(X, y_vector_form)
             
-            #print(loss)
+        return loss
+            
 
     def generate_classification_map(self, y):
         unique_classes = list(np.unique(y))
@@ -107,7 +125,7 @@ class MLP():
     def find_in_class_map(self, value:int):
         return self.class_map.index(value)
 
-    def nextEpoch(self, X, y):
+    def nextIteration(self, X, y):
         inputs = X
         batch_size = len(X)
         
@@ -227,31 +245,9 @@ class MLP():
         return output
 
 
-    def __predict__(self, X): # redo
-       
-        inputs = X
+    
         
-        u_l0 = np.dot(inputs, self.input_weights) + self.internal_bias_matrices[0]
-        a_l0 = self.internalActivationFunction(u_l0)
-
-        current_activation = a_l0
-
-
-        for layer in range(1, self.n_layers):
-            u_l = np.dot(current_activation, self.internal_weights[layer-1]) + self.internal_bias_matrices[layer]
-            current_activation = self.internalActivationFunction(u_l)
-
-
-        output_u_values = np.dot(current_activation, self.output_weights) + self.output_bias
-        
-        probabilities = self.outputActivationFunction(output_u_values)
-
-        predicted_classes = np.argmax(probabilities, axis=1)
-
-        return probabilities, predicted_classes
-
-        
-    def calculate_accuracy(self, X, y): # redo 
+    def calculate_accuracy(self, X, y):
 
         predicted_classes = self.predict(X)
         for i in range(len(predicted_classes)):
@@ -291,8 +287,8 @@ if (__name__ == "__main__"):
             y_batch = [img.getClassification() for img in current_batch]
         
             # Append the new batch array to the lists. This preserves the batch structure.
-            X_train.append(X_batch)
-            y_train.append(y_batch)
+            X_train.extend(X_batch)
+            y_train.extend(y_batch)
 
 
 
@@ -300,7 +296,7 @@ if (__name__ == "__main__"):
 
     #y_train = y_train[0:1000]
 
-    MLP1 = MLP(n_features=3072, n_layers=3, n_nodes=10, n_classes=5, lr=0.01, max_iter=2000)
+    MLP1 = MLP(n_features=3072, n_layers=3, n_nodes=10, n_classes=5, lr=0.001, max_iter=2000)
     print("training")
     MLP1.fit(X_train, y_train)
     
