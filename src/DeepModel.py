@@ -6,7 +6,7 @@ import lossFunctions
 
 
 class DeepModel:
-    def __init__(self, n_features=2, n_layers=1, n_nodes = 3, n_classes=2, lr=0.1, max_iter = 1000, lr_coef = 0.8, layer_shape_array = None, clipping_range=1.0, bn_momentum=0.9, batch_size=256):
+    def __init__(self, n_features=2, n_layers=1, n_nodes = 3, n_classes=2, lr=0.1, max_iter = 1000, lr_coef = 0.8, layer_shape_array = None, clipping_range=1.0, bn_momentum=0.9, batch_size=256, lr_decay=500):
         self.generator = np.random.default_rng(0)
 
         self.n_features = n_features
@@ -17,6 +17,7 @@ class DeepModel:
 
         self.lr = lr
         self.lr_coef = lr_coef
+        self.lr_decay = lr_decay
         self.clipping_range = clipping_range
         self.max_iter = max_iter
         
@@ -38,6 +39,10 @@ class DeepModel:
         self.epsilon = 1e-8
 
         self.bn_cache = [None] * len(self.layer_shape_array)
+        self.dropout = [None] * len(self.layer_shape_array)
+
+
+        
 
         self.print_info()
          
@@ -163,7 +168,7 @@ class DeepModel:
             # --- Epoch End Logic ---
             
             # Decay learning rate every X epochs (500 in your original code)
-            if epoch % 500 == 0 and epoch != 0:
+            if epoch % self.lr_decay == 0 and epoch != 0:
                 self.lr *= self.lr_coef
             
             # Print epoch loss every Y epochs (100 in your original code, adjusted for Epoch)
@@ -186,11 +191,11 @@ class DeepModel:
         
     def nextIteration(self, X, y):
         inputs = X
-        batch_size = len(X)
 
 
         if self.layer_shape_array:
         # If they are lists of NumPy arrays, iterate and zero out contents
+            
             for i in range(len(self.u_values)):
                 self.u_values[i][:] = 0
                 self.a_values[i][:] = 0
@@ -203,12 +208,23 @@ class DeepModel:
         self.u_values[0] = self.batchNormalization(self.u_values[0], 0)
         self.a_values[0] = self.internalActivationFunction(self.u_values[0])
 
+        self.dropout[0] = self.getDropoutVector(0)
+        
+        
+        self.a_values[0] = self.a_values[0] * self.dropout[0]
+
+        
+
         for layer in range(1,self.n_layers):
             self.u_values[layer] = self.a_values[layer-1] @ self.internal_weights[layer-1] + self.internal_bias_matrices[layer]
 
             self.u_values[layer] = self.batchNormalization(self.u_values[layer], layer)
 
-            self.a_values[layer] = self.internalActivationFunction(self.u_values[layer])
+            self.dropout[layer] = self.getDropoutVector(layer)
+
+            self.a_values[layer] = self.internalActivationFunction(self.u_values[layer]) * self.dropout[layer]
+
+            
 
         output_u_values = self.a_values[-1] @ self.output_weights + self.output_bias
         output = self.outputActivationFunction(output_u_values)
@@ -222,13 +238,13 @@ class DeepModel:
             d_output = avg_loss * self.outputActivationFunction.d(output)
 
 
-        d_output_weights = np.dot(self.a_values[-1].T, d_output) / batch_size
-        d_output_bias = np.sum(d_output, axis=0, keepdims=True) / batch_size
+        d_output_weights = np.dot(self.a_values[-1].T, d_output) / self.batch_size
+        d_output_bias = np.sum(d_output, axis=0, keepdims=True) / self.batch_size
 
         d_output_weights = np.clip(d_output_weights, -self.clipping_range, self.clipping_range)
         d_output_bias = np.clip(d_output_bias, -self.clipping_range, self.clipping_range)
 
-        self.output_weights -= self.lr * d_output_weights
+        self.output_weights -= self.lr * d_output_weights 
         self.output_bias -= self.lr * d_output_bias
 
         d_previous_layer = d_output
@@ -242,6 +258,8 @@ class DeepModel:
             else:
                 d_activated_values = np.dot(d_previous_layer, self.internal_weights[layer].T)
 
+            d_activated_values *= self.dropout[layer]
+
             d_bn_output = d_activated_values * self.internalActivationFunction.d(self.u_values[layer])
 
             d_unactivated_values, d_gamma, d_beta = self.batchNormBackpropogation(d_bn_output, layer)
@@ -251,8 +269,8 @@ class DeepModel:
             else:
                 previous_activation = self.a_values[layer-1]
 
-            d_layer_weights = np.dot(previous_activation.T, d_unactivated_values) / batch_size
-            d_layer_bias = (np.sum(d_unactivated_values, axis=0, keepdims=True) / batch_size)
+            d_layer_weights = np.dot(previous_activation.T, d_unactivated_values) / self.batch_size
+            d_layer_bias = (np.sum(d_unactivated_values, axis=0, keepdims=True) / self.batch_size)
             
 
 
@@ -350,7 +368,21 @@ class DeepModel:
 
         return d_u_layer, d_gamma, d_beta
         
+    def getDropoutVector(self, layer):
+        p=0.1
+        keep_prob = 1-p
+        if self.layer_shape_array:
+            size = self.layer_shape_array[layer]
+        else:
+            size = self.n_nodes
+            
+        
+        mask = self.generator.binomial(n=1, p=keep_prob, size=(1,size))
 
+        
+        dropout_scalars = mask / keep_prob
+
+        return dropout_scalars
 
 
 
@@ -436,7 +468,7 @@ if __name__ == "__main__":
 
     #y_train = y_train[0:1000]
 
-    DM1 = DeepModel(n_features=3072, n_layers=3, n_nodes=10, n_classes=5, lr=0.01, max_iter=400, layer_shape_array=[256,128,128,64,64,32,32,16,16,8], clipping_range=1)
+    DM1 = DeepModel(n_features=3072, n_layers=3, n_nodes=10, n_classes=5, lr=0.01, max_iter=400, layer_shape_array=[256,128,128,64,64,32,32,16,16,8], clipping_range=1, lr_decay=100)
     print("training")
     DM1.fit(X_train, y_train)
     
