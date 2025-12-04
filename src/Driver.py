@@ -1,6 +1,6 @@
 import DeepModel
 import BaselineModel
-import matplotlib
+import matplotlib as plt
 
 if __name__ == "__main__":
     pass

@@ -1,7 +1,10 @@
-import numpy as np
-import activations
+import numpy as cpu_np
+import cupy as np
+import cupy.random
+
+import activations_cupy
 import DataExtractor
-import lossFunctions
+import lossFunctions_cupy
 import time
 import pickle
 import os
@@ -37,8 +40,8 @@ class DeepModel:
         self.whole_dataset = None
         self.whole_classes = None
 
-        self.internalActivationFunction = activations.ReLU
-        self.outputActivationFunction = activations.Softmax   
+        self.internalActivationFunction = activations_cupy.ReLU
+        self.outputActivationFunction = activations_cupy.Softmax   
         
         self.bn_momentum = bn_momentum
         self.epsilon = 1e-8
@@ -60,9 +63,9 @@ class DeepModel:
 
         
     def print_info(self):
-        print("input weights:\n", self.input_weights)
-        print("internal weights:\n", self.internal_weights)
-        print("output weights:\n", self.output_weights)
+        print("input weights:\n", self.input_weights.get())
+        print("internal weights:\n", [w.get() for w in self.internal_weights])
+        print("output weights:\n", self.output_weights.get())
 
     def weightInitialisationWithUniformArray(self):
         print("uniform internal structure")
@@ -202,7 +205,7 @@ class DeepModel:
                 
                 
                 output = self.__predictWithoutGuess__(self.validation_X)
-                validation_loss = lossFunctions.batch_Entropy_loss(output, y_vector_form)
+                validation_loss = lossFunctions_cupy.batch_Entropy_loss(output, y_vector_form)
                 self.validationLossOverTraining.append(validation_loss)
                 validation_accuracy = self.calculate_accuracy(self.validation_X, self.validation_y)
                 self.validationAccuracy.append(validation_accuracy)
@@ -266,9 +269,9 @@ class DeepModel:
         output = self.outputActivationFunction(output_u_values)
 
         # loss
-        avg_loss = lossFunctions.batch_Entropy_loss(output, y) 
+        avg_loss = lossFunctions_cupy.batch_Entropy_loss(output, y) 
 
-        if self.outputActivationFunction == activations.Softmax:
+        if self.outputActivationFunction == activations_cupy.Softmax:
             d_output = output - y
         else:
             d_output = avg_loss * self.outputActivationFunction.d(output)
